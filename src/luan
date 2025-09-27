@@ -17,7 +17,7 @@ case $1 in
     --version|-v)
         version_view
         ;;
-    --help|-h|*)
+    --help|-h)
         man luan
         ;;
     --banner)
