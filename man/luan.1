@@ -1,0 +1,65 @@
+LUAN(1)                      Comandos de Usuário                     LUAN(1)
+
+NOME
+       luan - utilitário multifuncional para banner, versão, manipulação e hash de arquivos
+
+SINOPSE
+       luan [--version | -v]
+            [--help | -h]
+            [--banner]
+            [--file | -f ARQUIVO [--encode ALGORITMO]]
+
+DESCRIÇAO
+       O luan é um utilitário simples para exibir banners, mostrar versão,
+       visualizar/manipular arquivos e gerar hashes.
+
+OPÇOES
+       --version, -v
+              Mostra a versão atual do programa.
+
+       --help, -h
+              Exibe esta página de manual do programa.
+
+       --banner
+              Mostra o banner de boas-vindas.
+
+       --file, -f ARQUIVO
+              Exibe o conteudo do arquivo especificado com more
+              e imprime estatísticas com wc. Se o arquivo for um
+              diretório, exibe uma mensagem de erro.
+
+       --encode ALGORITMO
+              Usado após --file para calcular o hash do arquivo.
+              Atualmente suporta: sha256 ou sha1.
+
+EXEMPLOS
+       Mostrar a versão do programa:
+              luan --version
+
+       Exibir o banner:
+              luan --banner
+
+       Visualizar um arquivo e calcular seu SHA256:
+              luan -f arquivo.txt --encode sha256
+
+NOTAS
+       - Se o parâmetro --encode for fornecido sem algoritmo suportado,
+         o programa exibirá a mensagem de uso.
+
+       - O programa utiliza ferramentas externas sha256sum e sha1sum
+         para gerar os hashes.
+
+ARQUIVOS
+       src/main.sh 
+       src/setup.sh
+
+       man/luan.1
+
+AUTORES
+       Desenvolvido por theHzr.
+
+VEJA TAMBEM
+       sha256sum(1), sha1sum(1), wc(1), more(1)
+
+LUAN 0.1                        Setembro 2025                        LUAN(1)
+

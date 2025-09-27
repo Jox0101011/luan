@@ -1,0 +1,48 @@
+#!/bin/bash
+VERSION=0.1
+
+start_banner() {
+    echo -e "
+    \t\t\t\e[1;34mWelcome\e[0m\t\t\t\e[1;31mLUAN\e[0m\t\t\t \e[1;35mv$VERSION\e[0m
+    "
+}
+
+version_view() {
+    printf "
+    luan in v$VERSION
+    "
+}
+
+case $1 in 
+    --version|-v)
+        version_view
+        ;;
+    --help|-h|*)
+        man luan
+        ;;
+    --banner)
+        start_banner
+        ;;
+    --file|-f)
+        if [ -d "$2" ]; then
+            echo -e "\e[1;41mERROR:\e[0m File is Directory"
+        else
+            more $2; wc $2
+        fi
+        
+        if [ "$3" = "--encode" ]; then
+            if [ "$4" = "sha256" ]; then
+                cat $2 | sha256sum | pv
+                echo "Encrypted."
+                exit 1
+            else 
+                echo "use: man luan"
+            fi
+            if [ "$3" = "sha1" ]; then
+                cat $2 | sha1sum | pv
+                echo "Encrypted."
+            else
+                echo "use: man luan"
+            fi
+        fi
+esac
