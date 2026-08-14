@@ -1,48 +1,279 @@
-#!/bin/bash
-VERSION=0.1
+#!/usr/bin/ruby
+# encoding: UTF-8
+#
 
-start_banner() {
-    echo -e "
-    \t\t\t\e[1;34mWelcome\e[0m\t\t\t\e[1;31mLUAN\e[0m\t\t\t \e[1;35mv$VERSION\e[0m
-    "
-}
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
 
-version_view() {
-    printf "
-    luan in v$VERSION
-    "
-}
+VERSION = "1.2"
 
-case $1 in 
-    --version|-v)
-        version_view
-        ;;
-    --help|-h)
-        man luan
-        ;;
-    --banner)
-        start_banner
-        ;;
-    --file|-f)
-        if [ -d "$2" ]; then
-            echo -e "\e[1;41mERROR:\e[0m File is Directory"
-        else
-            more $2; wc $2
-        fi
-        
-        if [ "$3" = "--encode" ]; then
-            if [ "$4" = "sha256" ]; then
-                cat $2 | sha256sum | pv
-                echo "Encrypted."
-                exit 1
-            else 
-                echo "use: man luan"
-            fi
-            if [ "$3" = "sha1" ]; then
-                cat $2 | sha1sum | pv
-                echo "Encrypted."
-            else
-                echo "use: man luan"
-            fi
-        fi
-esac
+HELP = <<~EOF
+  Luan |#{VERSION}|
+  See luan manpage with `man luan`
+
+  Usage:
+    luan --file TEMPLATE [--vars VARFILE] [options]
+
+  Arguments:
+    --version         show version and exit
+    --help            show this help and exit
+    --banner          print the Luan banner and exit
+    --file FILE       template file to render (required unless --banner/--help)
+    --vars FILE       extra key=value file merged into the variable scope
+    --dump-vars       print the resolved variable scope as JSON and exit
+                      (no rendering happens)
+    --out FILE        write rendered output to FILE instead of stdout
+
+  Template syntax (inside --file):
+    {{name}}                simple substitution
+    {{name|default}}        substitution with fallback if unset
+    {{expr}}                arithmetic on numeric vars, e.g. {{year+1}}
+    @set key = value        define/override a variable inline
+    @if key
+      ...
+    @end                    conditional block (truthy = non-empty, non-"false")
+    @each item in list
+      {{item}}
+    @end                    list iteration (list var = comma-separated string)
+    @include path/to/file   inline another template, resolved relative to
+                             the including file
+    #! ...                  comment line, stripped from output
+
+  Variable resolution order (highest priority first):
+    1. @set directives inside the template
+    2. --vars FILE (key=value per line)
+    3. environment variables (LUAN_<KEY>)
+EOF
+
+BANNER = <<~EOF
+   _
+  | |_   _  __ _ _ __
+  | | | | |/ _` | '_ \\
+  | | |_| | (_| | | | |
+  |_|\\__,_|\\__,_|_| |_|  v#{VERSION}
+
+  minimalist text macro engine
+EOF
+
+class Scope
+  def initialize(vars_file: nil)
+    @vars = {}
+    load_env
+    load_vars_file(vars_file) if vars_file
+  end
+
+  def load_env
+    ENV.each do |k, v|
+      next unless k.start_with?("LUAN_")
+      @vars[k.sub("LUAN_", "").downcase] = v
+    end
+  end
+
+  def load_vars_file(path)
+    abort("luan: vars file not found: #{path}") unless File.exist?(path)
+    File.readlines(path).each do |line|
+      line = line.strip
+      next if line.empty? || line.start_with?("#")
+      key, val = line.split("=", 2)
+      next unless key && val
+      @vars[key.strip] = val.strip
+    end
+  end
+
+  def set(key, val)
+    @vars[key.strip] = val.to_s.strip
+  end
+
+  def get(key)
+    @vars[key.strip]
+  end
+
+  def truthy?(key)
+    v = get(key)
+    return false if v.nil?
+    return false if v.strip.empty?
+    return false if v.strip == "false"
+    return false if v.strip == "0"
+    true
+  end
+
+  def to_h
+    @vars
+  end
+
+  def to_json_string
+    entries = @vars.map { |k, v| "  \"#{k}\": \"#{v.gsub('"', '\\"')}\"" }
+    "{\n#{entries.join(",\n")}\n}"
+  end
+end
+
+def resolve_expr(expr, scope)
+  expr = expr.strip
+
+  if expr.include?("|")
+    key, default = expr.split("|", 2)
+    val = scope.get(key.strip)
+    return val.nil? || val.empty? ? default.strip : val
+  end
+
+  if expr =~ /\A([a-zA-Z_][\w]*)\s*([+\-])\s*(\d+)\z/
+    key, op, num = $1, $2, $3.to_i
+    base = scope.get(key)
+    if base && base =~ /\A\d+\z/
+      base_i = base.to_i
+      return (op == "+" ? base_i + num : base_i - num).to_s
+    end
+  end
+
+  val = scope.get(expr)
+  val.nil? ? "{{#{expr}}}" : val
+end
+
+def substitute(line, scope)
+  line.gsub(/\{\{(.+?)\}\}/) { resolve_expr($1, scope) }
+end
+
+def render(path, scope, base_dir = nil)
+  base_dir ||= File.dirname(File.expand_path(path))
+  abort("luan: template not found: #{path}") unless File.exist?(path)
+  lines = File.readlines(path)
+  out = []
+  render_lines(lines, scope, base_dir, out)
+  out.join
+end
+
+def render_lines(lines, scope, base_dir, out)
+  i = 0
+  while i < lines.length
+    line = lines[i]
+    stripped = line.strip
+
+    if stripped.start_with?("#!")
+      i += 1
+      next
+    end
+
+    if stripped.start_with?("@set ")
+      body = stripped.sub("@set ", "")
+      key, val = body.split("=", 2)
+      if key && val
+        scope.set(key.strip, substitute(val.strip, scope))
+      end
+      i += 1
+      next
+    end
+
+    if stripped.start_with?("@include ")
+      inc_path = stripped.sub("@include ", "").strip
+      full = File.join(base_dir, inc_path)
+      full = inc_path if File.exist?(inc_path) && !File.exist?(full)
+      out << render(full, scope, File.dirname(File.expand_path(full)))
+      i += 1
+      next
+    end
+
+    if stripped.start_with?("@if ")
+      key = stripped.sub("@if ", "").strip
+      block, i = grab_block(lines, i + 1)
+      render_lines(block, scope, base_dir, out) if scope.truthy?(key)
+      next
+    end
+
+    if stripped.start_with?("@each ")
+      m = stripped.match(/\A@each\s+(\w+)\s+in\s+(\w+)\z/)
+      block, i = grab_block(lines, i + 1)
+      if m
+        item_name, list_name = m[1], m[2]
+        list_val = scope.get(list_name) || ""
+        list_val.split(",").map(&:strip).reject(&:empty?).each do |item|
+          scope.set(item_name, item)
+          render_lines(block, scope, base_dir, out)
+        end
+      end
+      next
+    end
+
+    out << substitute(line, scope)
+    i += 1
+  end
+end
+
+def grab_block(lines, start_i)
+  depth = 1
+  block = []
+  i = start_i
+  while i < lines.length
+    s = lines[i].strip
+    depth += 1 if s.start_with?("@if ") || s.start_with?("@each ")
+    depth -= 1 if s == "@end"
+    if depth == 0
+      return [block, i + 1]
+    end
+    block << lines[i]
+    i += 1
+  end
+  abort("luan: unterminated block (missing @end)")
+end
+
+def parse_args(argv)
+  opts = { file: nil, vars: nil, out: nil, dump_vars: false,
+           banner: false, help: false, version: false }
+  i = 0
+  while i < argv.length
+    case argv[i]
+    when "--version"   then opts[:version] = true
+    when "--help"      then opts[:help] = true
+    when "--banner"    then opts[:banner] = true
+    when "--dump-vars" then opts[:dump_vars] = true
+    when "--file"      then i += 1; opts[:file] = argv[i]
+    when "--vars"      then i += 1; opts[:vars] = argv[i]
+    when "--out"       then i += 1; opts[:out] = argv[i]
+    else
+      abort("luan: unknown argument: #{argv[i]}\nRun `luan --help` for usage.")
+    end
+    i += 1
+  end
+  opts
+end
+
+def main
+  opts = parse_args(ARGV)
+
+  if opts[:version]
+    puts VERSION
+    return
+  end
+
+  if opts[:help]
+    puts HELP
+    return
+  end
+
+  if opts[:banner]
+    puts BANNER
+    return
+  end
+
+  if opts[:file].nil?
+    puts HELP
+    return
+  end
+
+  scope = Scope.new(vars_file: opts[:vars])
+
+  if opts[:dump_vars]
+    render(opts[:file], scope)
+    puts scope.to_json_string
+    return
+  end
+
+  result = render(opts[:file], scope)
+
+  if opts[:out]
+    File.write(opts[:out], result)
+  else
+    print result
+  end
+end
+
+main if __FILE__ == $0

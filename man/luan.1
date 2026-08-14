@@ -1,65 +1,264 @@
-LUAN(1)                      Comandos de Usuário                     LUAN(1)
+.TH LUAN 1 "2026" "luan 1.2" "Luan Manual"
+.SH NAME
+luan \- minimalist text templating and macro engine
+.SH SYNOPSIS
+.B luan
+.B \-\-file
+.I TEMPLATE
+[\fB\-\-vars\fR \fIVARFILE\fR]
+[\fB\-\-out\fR \fIFILE\fR]
+[\fB\-\-dump\-vars\fR]
+.br
+.B luan
+[\fB\-\-version\fR | \fB\-\-help\fR | \fB\-\-banner\fR]
+.SH DESCRIPTION
+.B luan
+is a single-file, zero-dependency text macro engine. It takes a
+.I template
+file containing plain text mixed with variable substitutions and a
+small set of block directives, resolves a variable
+.I scope
+from three layered sources, and renders the result to stdout or to a
+file.
 
-NOME
-       luan - utilitário multifuncional para banner, versão, manipulação e hash de arquivos
-
-SINOPSE
-       luan [--version | -v]
-            [--help | -h]
-            [--banner]
-            [--file | -f ARQUIVO [--encode ALGORITMO]]
-
-DESCRIÇAO
-       O luan é um utilitário simples para exibir banners, mostrar versão,
-       visualizar/manipular arquivos e gerar hashes.
-
-OPÇOES
-       --version, -v
-              Mostra a versão atual do programa.
-
-       --help, -h
-              Exibe esta página de manual do programa.
-
-       --banner
-              Mostra o banner de boas-vindas.
-
-       --file, -f ARQUIVO
-              Exibe o conteudo do arquivo especificado com more
-              e imprime estatísticas com wc. Se o arquivo for um
-              diretório, exibe uma mensagem de erro.
-
-       --encode ALGORITMO
-              Usado após --file para calcular o hash do arquivo.
-              Atualmente suporta: sha256 ou sha1.
-
-EXEMPLOS
-       Mostrar a versão do programa:
-              luan --version
-
-       Exibir o banner:
-              luan --banner
-
-       Visualizar um arquivo e calcular seu SHA256:
-              luan -f arquivo.txt --encode sha256
-
-NOTAS
-       - Se o parâmetro --encode for fornecido sem algoritmo suportado,
-         o programa exibirá a mensagem de uso.
-
-       - O programa utiliza ferramentas externas sha256sum e sha1sum
-         para gerar os hashes.
-
-ARQUIVOS
-       src/main.sh 
-       src/setup.sh
-
-       man/luan.1
-
-AUTORES
-       Desenvolvido por theHzr.
-
-VEJA TAMBEM
-       sha256sum(1), sha1sum(1), wc(1), more(1)
-
-LUAN 0.1                        Setembro 2025                        LUAN(1)
-
+It is not a general-purpose templating library. There is no
+expression language beyond simple defaults and integer +/\- arithmetic,
+no user-defined functions, and no nested data structures. Lists are
+flat, comma-separated strings. This is deliberate: luan is meant to
+be readable end-to-end in one sitting, both the engine and the
+templates it renders.
+.SH OPTIONS
+.TP
+.BR \-\-file " " \fIFILE\fR
+Template file to render. Required for rendering; omitted only when
+using \fB\-\-version\fR, \fB\-\-help\fR, or \fB\-\-banner\fR.
+.TP
+.BR \-\-vars " " \fIFILE\fR
+A key=value file merged into the variable scope before rendering.
+One assignment per line. Lines starting with
+.B #
+and blank lines are ignored.
+.TP
+.B \-\-dump\-vars
+Resolve the template's variable scope \(em including any
+.B @set
+directives inside it \(em and print it as JSON to stdout.
+.B No template output is produced.
+Useful for debugging a scope before trusting the rendered output.
+.TP
+.BR \-\-out " " \fIFILE\fR
+Write the rendered result to \fIFILE\fR instead of stdout.
+.TP
+.B \-\-banner
+Print the luan ASCII banner and exit.
+.TP
+.B \-\-version
+Print the version number and exit.
+.TP
+.B \-\-help
+Print a short usage summary and exit.
+.SH VARIABLE RESOLUTION ORDER
+A variable may be defined in more than one place. The first
+definition found wins, in this order:
+.IP 1. 4
+.B @set
+directives inside the template (evaluated top to bottom as the
+template is walked; a later
+.B @set
+of the same key overrides an earlier one).
+.IP 2. 4
+The
+.B \-\-vars
+file, if given.
+.IP 3. 4
+Environment variables prefixed
+.BR LUAN_ ,
+lowercased with the prefix stripped. For example
+.B LUAN_AUTHOR=lay
+in the environment makes
+.B {{author}}
+resolve to
+.BR lay .
+.SH TEMPLATE SYNTAX
+.SS Comments
+.PP
+A line whose first two characters are
+.B #!
+is dropped entirely from the output.
+.IP
+.EX
+#! this line never appears in the render
+.EE
+.SS Substitution
+.PP
+.B {{name}}
+is replaced with the current value of
+.I name
+in scope. If
+.I name
+is undefined, the literal text
+.B {{name}}
+is left in place \(em unresolved substitutions are visible on
+purpose, so a broken template fails loudly instead of silently
+dropping content.
+.IP
+.EX
+Hello, {{author}}!
+.EE
+.SS Defaults
+.PP
+.B {{name|default}}
+falls back to the literal text
+.I default
+if
+.I name
+is unset or empty.
+.IP
+.EX
+{{nickname|anonymous}}
+.EE
+.SS Arithmetic
+.PP
+.B {{name+N}}
+or
+.B {{name\-N}}
+adds or subtracts the integer
+.I N
+from the current numeric value of
+.IR name .
+Only single-digit-or-more integer literals are supported, and only
+one operation per expression \(em there is no operator chaining and
+no parentheses.
+.IP
+.EX
+@set year = 2026
+Next year: {{year+1}}
+.EE
+.SS @set
+.PP
+.B @set key = value
+defines or overrides a variable within the template itself. The
+right-hand side is itself substituted before assignment, so a
+.B @set
+may reference earlier variables.
+.IP
+.EX
+@set first = Ada
+@set greeting = Hello, {{first}}
+{{greeting}}!
+.EE
+.SS @if / @end
+.PP
+.B @if key
+opens a conditional block, closed by a matching
+.BR @end .
+The block is rendered only when
+.I key
+is
+.IR truthy .
+A key is falsy when it is undefined, empty, the literal string
+.BR false ,
+or the literal string
+.BR 0 ;
+anything else is truthy.
+.IP
+.EX
+@if premium
+Thanks for being a premium user.
+@end
+.EE
+.SS @each / @end
+.PP
+.B @each item in list
+opens a loop block, closed by a matching
+.BR @end .
+.I list
+must resolve to a comma-separated string; each comma-separated
+element becomes the value of
+.I item
+for one pass through the block body, in order, with surrounding
+whitespace trimmed. Empty elements are skipped.
+.IP
+.EX
+@set stack = C, Go, Ruby, Perl
+@each lang in stack
+\- {{lang}}
+@end
+.EE
+.PP
+.B @if
+and
+.B @each
+blocks may be nested inside one another; each
+.B @end
+closes the nearest still-open block.
+.SS @include
+.PP
+.B @include path
+inlines another template file at this point, rendered against the
+.B same
+variable scope. The path is resolved relative to the directory of
+the file containing the
+.B @include
+directive, not the current working directory \(em so includes work
+the same way regardless of where
+.B luan
+is invoked from.
+.IP
+.EX
+@include partials/footer.luan
+.EE
+.SH EXIT STATUS
+.TP
+.B 0
+Successful render, or a \fB\-\-help\fR/\fB\-\-version\fR/\fB\-\-banner\fR call.
+.TP
+.B 1
+Template file not found, vars file not found, an
+.B @if
+or
+.B @each
+block missing its matching
+.BR @end ,
+or an unknown command-line argument.
+.SH FILES
+.TP
+.I *.luan
+Conventional extension for luan template files. Not enforced by the
+engine \(em any file path works.
+.SH EXAMPLES
+.PP
+Render a template with an external variable file:
+.IP
+.EX
+luan \-\-file report.luan \-\-vars prod.vars \-\-out report.txt
+.EE
+.PP
+Inspect the resolved scope without rendering, to catch a typo before
+it ships:
+.IP
+.EX
+luan \-\-file report.luan \-\-vars prod.vars \-\-dump\-vars
+.EE
+.PP
+Feed a variable through the environment instead of a vars file:
+.IP
+.EX
+LUAN_AUTHOR=lay luan \-\-file letter.luan
+.EE
+.SH NOTES
+.PP
+There is intentionally no
+.BR @else .
+An
+.B @if
+that needs an alternate branch is usually a sign the logic belongs
+in whatever generates the
+.B \-\-vars
+file, not in the template. Keep the template dumb; keep the
+variables smart.
+.SH AUTHOR
+written by lay(translate by claude).
+.SH SEE ALSO
+.BR m4 (1),
+.BR envsubst (1)
