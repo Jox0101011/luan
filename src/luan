@@ -5,10 +5,11 @@
 Encoding.default_external = Encoding::UTF_8
 Encoding.default_internal = Encoding::UTF_8
 
-VERSION = "1.2"
+VERSION = "1.2-dev"
 
 HELP = <<~EOF
-  Luan |#{VERSION}|
+  project https://github.com/Jox0101011/luan
+  luan v#{VERSION}
   See luan manpage with `man luan`
 
   Usage:
@@ -48,11 +49,13 @@ EOF
 BANNER = <<~EOF
    _
   | |_   _  __ _ _ __
-  | | | | |/ _` | '_ \\
-  | | |_| | (_| | | | |
+  | | | | |/ _` | '_ \\ https://github.com/Jox0101011/luan
+  | | |_| | (_| | | | | by lay
   |_|\\__,_|\\__,_|_| |_|  v#{VERSION}
 
   minimalist text macro engine
+  
+  See more projects https://github.com/Jox0101011
 EOF
 
 class Scope

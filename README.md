@@ -28,4 +28,24 @@ doas ./setup.sh --uninstall   # or --unistall to uninstall
 doas ./setup.sh               # to install
 ```
 
+## Project Treefile
+```
+(https://github.com/Jox0101011/luan)
+├── man
+│   └── luan.1
+├── README.md
+├── setup.sh
+├── src
+│   └── luan
+└── tests
+    └── exp001
+        ├── dump-vars.json
+        ├── dump-vars.out
+        ├── greeting.luan
+        ├── hello.luan
+        ├── if.luan
+        ├── out.luan
+        └── stack.luan
+```
+
 ## See more `man luan`
