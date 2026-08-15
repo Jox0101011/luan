@@ -1,0 +1,5 @@
+@set premium=true
+
+@if premium
+thanks for being a premium user..
+@end

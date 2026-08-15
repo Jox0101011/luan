@@ -1,2 +1,5 @@
 @set year = 2026
 Next year: {{year+1}}
+
+@set name = lay
+name = {{name}}

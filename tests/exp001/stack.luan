@@ -1,0 +1,4 @@
+@set stack = c, go, ruby, perl
+@each lang in stack
+- {{lang}}
+@end
